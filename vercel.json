@@ -1,26 +1,11 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "server.js",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/webhook",
-      "dest": "server.js",
-      "methods": ["POST"]
-    },
-    {
-      "src": "/ping",
-      "dest": "server.js",
-      "methods": ["GET"]
-    },
-    {
-      "src": "/",
-      "dest": "server.js",
-      "methods": ["GET"]
-    }
-  ]
+  "builds": [{
+    "src": "server.js",
+    "use": "@vercel/node"
+  }],
+  "routes": [{
+    "src": "/(.*)",
+    "dest": "server.js"
+  }]
 }

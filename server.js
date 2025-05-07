@@ -18,26 +18,23 @@ const validateRequest = (req, res, next) => {
 
 // Función mejorada para enviar alertas
 async function sendAlert(message) {
+  const url = `https://api.telegram.org/bot${process.env.TELEGRAM_TOKEN}/sendMessage`;
+  
   try {
-    console.log("=== INTENTANDO ENVIAR A TELEGRAM ===");
-    console.log("Token:", process.env.TELEGRAM_TOKEN);
-    console.log("Chat ID:", process.env.CHAT_ID);
-    
-    const url = `https://api.telegram.org/bot${process.env.TELEGRAM_TOKEN}/sendMessage`;
+    console.log("Enviando a Telegram:", { url, message }); // Log clave
     const response = await axios.post(url, {
       chat_id: process.env.CHAT_ID,
       text: message,
-      parse_mode: 'Markdown'
+      parse_mode: 'Markdown',
+      disable_web_page_preview: true // Evita problemas con enlaces
     });
-    
-    console.log("✅ Respuesta de Telegram:", response.data);
-    return true;
+    console.log("✅ Mensaje enviado:", response.data);
   } catch (error) {
-    console.error("❌ Error FATAL al enviar a Telegram:", {
-      error: error.message,
-      response: error.response?.data
+    console.error("❌ Error enviando a Telegram:", {
+      status: error.response?.status,
+      data: error.response?.data,
+      message: error.message
     });
-    return false;
   }
 }
 

@@ -3,17 +3,24 @@
   "builds": [
     {
       "src": "server.js",
-      "use": "@vercel/node",
-      "config": { 
-        "includeFiles": ["**/*.js", "**/*.json"] 
-      }
+      "use": "@vercel/node"
     }
   ],
   "routes": [
     {
-      "src": "/(.*)",
+      "src": "/webhook",
       "dest": "server.js",
-      "methods": ["GET", "POST"]
+      "methods": ["POST"]
+    },
+    {
+      "src": "/ping",
+      "dest": "server.js",
+      "methods": ["GET"]
+    },
+    {
+      "src": "/",
+      "dest": "server.js",
+      "methods": ["GET"]
     }
   ]
 }

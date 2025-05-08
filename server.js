@@ -1,6 +1,6 @@
 const axios = require('axios');
 
-exports.handler = async (event) => {
+async function handler(event) {
   try {
     // Parseamos el payload recibido del webhook
     const payload = JSON.parse(event.body);
@@ -71,4 +71,7 @@ async function sendTelegramNotification(transacciones) {
     console.error('[HELIUS] ❌ Error enviando notificación a Telegram:', err);
   }
 }
+
+// Exportar la función por defecto como lo requiere Vercel
+module.exports = handler;
 

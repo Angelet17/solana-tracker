@@ -2,58 +2,71 @@ const express = require('express');
 const axios = require('axios');
 const app = express();
 
-// Configuración para recibir datos en formato JSON
+// Middleware para manejar JSON
 app.use(express.json());
 
-// Función para enviar mensajes a Telegram
-async function sendAlert(message) {
-  const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
+// Configuración del bot de Telegram
+const TELEGRAM_TOKEN = 'TU_TOKEN_DE_TELEGRAM';
+const TELEGRAM_CHAT_ID = 'TU_CHAT_ID';
 
-  const telegramUrl = `https://api.telegram.org/bot${telegramBotToken}/sendMessage`;
-  await axios.post(telegramUrl, {
-    chat_id: chatId,
-    text: message,
-    parse_mode: 'Markdown',
-  });
-}
-
-// Endpoint para recibir el Webhook
-app.post('/webhook', async (req, res) => {
+// Función para enviar notificaciones a Telegram
+const sendTelegramNotification = async (message) => {
   try {
-    const { event } = req.body;
-    console.log('[HELIUS] 🔔 Payload recibido:', event);
-
-    if (!event || !event.source || !event.signature) {
-      console.warn('[HELIUS] ⚠️ Payload inválido');
-      return res.status(400).send('Datos incompletos');
-    }
-
-    // Verificar si la transacción es de 99.99 SOL
-    const expectedAmountSOL = 99990000000;  // 99.99 SOL (en lamports)
-    
-    // Validar si la transacción es del monto correcto y de la cuenta correcta
-    if (event.nativeBalanceChange === expectedAmountSOL && event.source === 'BmFdpraQhkiDQE6SnfG5omcA1VwzqfXrwtNYBwWTymy6') {
-      console.log('[HELIUS] 🔔 Transacción válida de 99.99 SOL encontrada:', event);
-      const explorerUrl = `https://solscan.io/tx/${event.signature}`;
-      const msg = `🚨 *99.99 SOL Enviados* 🚨\n\n▸ *Origen:* \`${event.source}\`\n▸ [Ver TX](${explorerUrl})`;
-
-      console.log('[HELIUS] Notificando transacción...');
-      await sendAlert(msg);  // Enviar mensaje a Telegram
-    } else {
-      console.log('[HELIUS] 🔍 Transacción no coincide con los criterios.');
-    }
-
-    res.status(200).send("OK");
+    await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+      chat_id: TELEGRAM_CHAT_ID,
+      text: message,
+    });
   } catch (error) {
-    console.error('[HELIUS] 🔥 Error crítico:', error);
-    res.status(500).send("Error interno");
+    console.error('Error al enviar la notificación a Telegram:', error);
   }
+};
+
+// Ruta del webhook
+app.post('/webhook', (req, res) => {
+  // Log para ver el payload recibido
+  console.log('[HELIUS] 🔔 Payload recibido:', req.body);
+
+  // Verificar si el payload contiene transacciones
+  const transactions = req.body?.transactions;
+
+  // Si no hay transacciones, retornar un log y responder correctamente sin error
+  if (!transactions || transactions.length === 0) {
+    console.log('[HELIUS] ⚠️ No se encontraron transacciones en el payload');
+    return res.status(200).send('OK');
+  }
+
+  // Filtrar transacciones de 99.99 Solanas
+  const filteredTransactions = transactions.filter(transaction => {
+    return transaction.nativeBalanceChange === 99.99;  // Filtro de transacciones con exactamente 99.99 Solanas
+  });
+
+  // Log del número de transacciones encontradas
+  console.log(`[HELIUS] ✔️ Número de transacciones encontradas: ${transactions.length}`);
+
+  // Si no se encuentra ninguna transacción de 99.99 Solanas
+  if (filteredTransactions.length === 0) {
+    console.log('[HELIUS] ⚠️ No se encontraron transacciones de 99.99 Solanas');
+    return res.status(200).send('OK');  // Aquí se responde bien, pero sin hacer nada
+  }
+
+  // Si encontramos transacciones de 99.99 Solanas, hacer algo con ellas (ej. log)
+  console.log('[HELIUS] ✔️ Se encontraron transacciones de 99.99 Solanas:', filteredTransactions);
+
+  // Log con las primeras 3 transacciones (o menos si no hay tantas)
+  const sampleTransactions = filteredTransactions.slice(0, 3);  // Tres transacciones de ejemplo
+  console.log('[HELIUS] ⚡️ Ejemplo de transacciones encontradas:', JSON.stringify(sampleTransactions));
+
+  // Enviar notificación a Telegram solo si se encuentra una transacción de 99.99 Solanas
+  const message = `Se encontraron transacciones de 99.99 Solanas: ${JSON.stringify(filteredTransactions)}`;
+  sendTelegramNotification(message);
+
+  // Responder correctamente al webhook
+  return res.status(200).send('OK');
 });
 
-// Puerto de escucha
+// Escuchar en el puerto 3000 (o el que necesites)
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Servidor escuchando en el puerto ${PORT}`);
+  console.log(`Servidor corriendo en puerto ${PORT}`);
 });
 

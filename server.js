@@ -1,85 +1,99 @@
-const axios = require('axios');
+export default async function handler(req, res) {
+  console.log("[HELIUS] 🏁 Iniciando procesamiento de la transacción...");
 
-async function handler(event) {
-  try {
-    console.log('[HELIUS] 🏁 Iniciando procesamiento de la transacción...');
-    
-    // Verificar que el cuerpo de la solicitud existe
-    if (!event.body) {
-      console.log('[HELIUS] ⚠️ No se recibió un cuerpo en la solicitud.');
-      return { statusCode: 400, body: 'No body in the request' };
-    }
-
-    // Aquí ya no necesitamos parsear, directamente accedemos al body
-    const payload = event.body;
-
-    console.log('[HELIUS] 🔔 Payload recibido:', payload);
-
-    if (!payload || payload.length === 0) {
-      console.log('[HELIUS] ⚠️ No se encontraron transacciones.');
-      return { statusCode: 200, body: 'No transactions found' };
-    }
-
-    // Almacenamos las transacciones encontradas
-    const transacciones = [];
-    let numTransacciones = 0;
-
-    // Recorremos todas las transacciones recibidas
-    for (const tx of payload) {
-      console.log('[HELIUS] ⚡️ Procesando transacción:', tx);
-
-      // Filtramos solo las transacciones con 99.99 SOL (en caso de que el monto sea en SOL)
-      const nativeTransfer = tx.nativeTransfers.find(transfer => {
-        return transfer.amount === 9999000000; // 99.99 SOL en lamports
-      });
-
-      if (nativeTransfer) {
-        numTransacciones++;
-        transacciones.push(tx);
-      }
-    }
-
-    if (numTransacciones === 0) {
-      console.log('[HELIUS] ⚠️ No se encontraron transacciones con 99.99 SOL.');
-    } else {
-      console.log(`[HELIUS] ✅ ${numTransacciones} transacción(es) de 99.99 SOL encontradas.`);
-
-      // Muestra tres transacciones de ejemplo (para depuración manual)
-      console.log('[HELIUS] Ejemplos de transacciones encontradas:', transacciones.slice(0, 3));
-      
-      // Aquí iría el código para enviar la notificación a Telegram
-      if (numTransacciones > 0) {
-        await sendTelegramNotification(transacciones);
-      }
-    }
-
-    return { statusCode: 200, body: 'Webhook processed successfully' };
-  } catch (error) {
-    console.error('[HELIUS] ❌ Error procesando webhook:', error);
-    return { statusCode: 500, body: 'Error processing webhook' };
-  }
-};
-
-// Función para enviar una notificación a Telegram
-async function sendTelegramNotification(transacciones) {
-  const telegramUrl = `https://api.telegram.org/botYOUR_BOT_API_KEY/sendMessage`;
-  const chatId = 'YOUR_CHAT_ID';
-
-  const message = `Transacción detectada de 99.99 SOL:\n` + transacciones.map(tx => {
-    return `Transacción: ${tx.signature}\nDe: ${tx.nativeTransfers[0].fromUserAccount}\nA: ${tx.nativeTransfers[0].toUserAccount}\nMonto: 99.99 SOL`;
-  }).join('\n\n');
+  // ✅ Respuesta rápida para evitar timeout
+  res.status(200).send("OK");
 
   try {
-    await axios.post(telegramUrl, {
-      chat_id: chatId,
-      text: message,
+    const payload = req.body;
+
+    if (!payload || !Array.isArray(payload) || payload.length === 0) {
+      console.warn("[HELIUS] ⚠️ Payload inválido o vacío");
+      return;
+    }
+
+    console.log("[HELIUS] 🔔 Payload recibido:", JSON.stringify(payload, null, 2));
+
+    const KUCOIN_WALLET = "BmFdpraQhkiDQE6SnfG5omcA1VwzqfXrwtNYBwWTymy6";
+    const TARGET_AMOUNT_SOL = 99.99;
+    const LAMPORTS_PER_SOL = 1_000_000_000;
+
+    let transaccionesConWallet = payload.filter((tx) => {
+      return (
+        tx.nativeTransfers &&
+        tx.nativeTransfers.some(
+          (nt) => nt.fromUserAccount === KUCOIN_WALLET || nt.toUserAccount === KUCOIN_WALLET
+        )
+      );
     });
-    console.log('[HELIUS] 📲 Notificación enviada a Telegram');
-  } catch (err) {
-    console.error('[HELIUS] ❌ Error enviando notificación a Telegram:', err);
+
+    if (transaccionesConWallet.length === 0) {
+      console.log("[HELIUS] 📭 No se encontraron transacciones relevantes con la wallet.");
+      return;
+    }
+
+    console.log(`[HELIUS] 🔍 ${transaccionesConWallet.length} transacciones encontradas con la wallet.`);
+
+    // Mostrar 3 ejemplos
+    console.log("[HELIUS] 📦 Ejemplo(s) de transacciones:");
+    transaccionesConWallet.slice(0, 3).forEach((tx, idx) => {
+      console.log(`  ➤ [${idx + 1}] ${tx.description}`);
+    });
+
+    const transaccionesObjetivo = transaccionesConWallet.filter((tx) =>
+      tx.nativeTransfers.some(
+        (nt) =>
+          (nt.fromUserAccount === KUCOIN_WALLET || nt.toUserAccount === KUCOIN_WALLET) &&
+          nt.amount === TARGET_AMOUNT_SOL * LAMPORTS_PER_SOL
+      )
+    );
+
+    if (transaccionesObjetivo.length === 0) {
+      console.log("[HELIUS] ⚠️ No se encontraron transacciones con 99.99 SOL.");
+      return;
+    }
+
+    console.log(`[HELIUS] ✅ ${transaccionesObjetivo.length} transacción(es) con 99.99 SOL encontrada(s)!`);
+
+    // 📨 Notificar por Telegram
+    for (const tx of transaccionesObjetivo) {
+      const message = `🚨 Transacción de 99.99 SOL detectada 🚨\n\nHash: ${tx.signature}\nDescripción: ${tx.description}`;
+      await enviarTelegramMensaje(message);
+    }
+  } catch (error) {
+    console.error("[HELIUS] ❌ Error procesando webhook:", error);
   }
 }
 
-// Exportar la función por defecto como lo requiere Vercel
-module.exports = handler;
+// 👇 Función auxiliar para enviar mensaje por Telegram
+async function enviarTelegramMensaje(texto) {
+  const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+  const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+
+  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
+    console.error("[TELEGRAM] ❌ Faltan credenciales.");
+    return;
+  }
+
+  const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: TELEGRAM_CHAT_ID,
+        text: texto,
+      }),
+    });
+
+    if (!res.ok) {
+      console.error("[TELEGRAM] ❌ Error enviando mensaje:", await res.text());
+    } else {
+      console.log("[TELEGRAM] ✅ Notificación enviada.");
+    }
+  } catch (err) {
+    console.error("[TELEGRAM] ❌ Error en la solicitud:", err);
+  }
+}
 

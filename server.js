@@ -1,72 +1,74 @@
-const express = require('express');
 const axios = require('axios');
-const app = express();
 
-// Middleware para manejar JSON
-app.use(express.json());
-
-// Configuración del bot de Telegram
-const TELEGRAM_TOKEN = 'TU_TOKEN_DE_TELEGRAM';
-const TELEGRAM_CHAT_ID = 'TU_CHAT_ID';
-
-// Función para enviar notificaciones a Telegram
-const sendTelegramNotification = async (message) => {
+exports.handler = async (event) => {
   try {
-    await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-      chat_id: TELEGRAM_CHAT_ID,
-      text: message,
-    });
+    // Parseamos el payload recibido del webhook
+    const payload = JSON.parse(event.body);
+
+    console.log('[HELIUS] 🔔 Payload recibido:', payload);
+
+    if (!payload || payload.length === 0) {
+      console.log('[HELIUS] ⚠️ No se encontraron transacciones.');
+      return { statusCode: 200, body: 'No transactions found' };
+    }
+
+    // Almacenamos las transacciones encontradas
+    const transacciones = [];
+    let numTransacciones = 0;
+
+    // Recorremos todas las transacciones recibidas
+    for (const tx of payload) {
+      console.log('[HELIUS] ⚡️ Procesando transacción:', tx);
+
+      // Filtramos solo las transacciones con 99.99 SOL (en caso de que el monto sea en SOL)
+      const nativeTransfer = tx.nativeTransfers.find(transfer => {
+        return transfer.amount === 9999000000; // 99.99 SOL en lamports
+      });
+
+      if (nativeTransfer) {
+        numTransacciones++;
+        transacciones.push(tx);
+      }
+    }
+
+    if (numTransacciones === 0) {
+      console.log('[HELIUS] ⚠️ No se encontraron transacciones con 99.99 SOL.');
+    } else {
+      console.log(`[HELIUS] ✅ ${numTransacciones} transacción(es) de 99.99 SOL encontradas.`);
+
+      // Muestra tres transacciones de ejemplo (para depuración manual)
+      console.log('[HELIUS] Ejemplos de transacciones encontradas:', transacciones.slice(0, 3));
+      
+      // Aquí iría el código para enviar la notificación a Telegram
+      if (numTransacciones > 0) {
+        await sendTelegramNotification(transacciones);
+      }
+    }
+
+    return { statusCode: 200, body: 'Webhook processed successfully' };
   } catch (error) {
-    console.error('Error al enviar la notificación a Telegram:', error);
+    console.error('[HELIUS] ❌ Error procesando webhook:', error);
+    return { statusCode: 500, body: 'Error processing webhook' };
   }
 };
 
-// Ruta del webhook
-app.post('/webhook', (req, res) => {
-  // Log para ver el payload recibido
-  console.log('[HELIUS] 🔔 Payload recibido:', req.body);
+// Función para enviar una notificación a Telegram
+async function sendTelegramNotification(transacciones) {
+  const telegramUrl = `https://api.telegram.org/botYOUR_BOT_API_KEY/sendMessage`;
+  const chatId = 'YOUR_CHAT_ID';
 
-  // Verificar si el payload contiene transacciones
-  const transactions = req.body?.transactions;
+  const message = `Transacción detectada de 99.99 SOL:\n` + transacciones.map(tx => {
+    return `Transacción: ${tx.signature}\nDe: ${tx.nativeTransfers[0].fromUserAccount}\nA: ${tx.nativeTransfers[0].toUserAccount}\nMonto: 99.99 SOL`;
+  }).join('\n\n');
 
-  // Si no hay transacciones, retornar un log y responder correctamente sin error
-  if (!transactions || transactions.length === 0) {
-    console.log('[HELIUS] ⚠️ No se encontraron transacciones en el payload');
-    return res.status(200).send('OK');
+  try {
+    await axios.post(telegramUrl, {
+      chat_id: chatId,
+      text: message,
+    });
+    console.log('[HELIUS] 📲 Notificación enviada a Telegram');
+  } catch (err) {
+    console.error('[HELIUS] ❌ Error enviando notificación a Telegram:', err);
   }
-
-  // Filtrar transacciones de 99.99 Solanas
-  const filteredTransactions = transactions.filter(transaction => {
-    return transaction.nativeBalanceChange === 99.99;  // Filtro de transacciones con exactamente 99.99 Solanas
-  });
-
-  // Log del número de transacciones encontradas
-  console.log(`[HELIUS] ✔️ Número de transacciones encontradas: ${transactions.length}`);
-
-  // Si no se encuentra ninguna transacción de 99.99 Solanas
-  if (filteredTransactions.length === 0) {
-    console.log('[HELIUS] ⚠️ No se encontraron transacciones de 99.99 Solanas');
-    return res.status(200).send('OK');  // Aquí se responde bien, pero sin hacer nada
-  }
-
-  // Si encontramos transacciones de 99.99 Solanas, hacer algo con ellas (ej. log)
-  console.log('[HELIUS] ✔️ Se encontraron transacciones de 99.99 Solanas:', filteredTransactions);
-
-  // Log con las primeras 3 transacciones (o menos si no hay tantas)
-  const sampleTransactions = filteredTransactions.slice(0, 3);  // Tres transacciones de ejemplo
-  console.log('[HELIUS] ⚡️ Ejemplo de transacciones encontradas:', JSON.stringify(sampleTransactions));
-
-  // Enviar notificación a Telegram solo si se encuentra una transacción de 99.99 Solanas
-  const message = `Se encontraron transacciones de 99.99 Solanas: ${JSON.stringify(filteredTransactions)}`;
-  sendTelegramNotification(message);
-
-  // Responder correctamente al webhook
-  return res.status(200).send('OK');
-});
-
-// Escuchar en el puerto 3000 (o el que necesites)
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Servidor corriendo en puerto ${PORT}`);
-});
+}
 

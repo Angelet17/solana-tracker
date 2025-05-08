@@ -1,79 +1,49 @@
-require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
 const app = express();
+
+// Configuración para recibir datos en formato JSON
 app.use(express.json());
 
-// Debug: Verificación inicial de variables
-console.log('[CONFIG] Variables de entorno:', {
-  TELEGRAM_TOKEN: process.env.TELEGRAM_TOKEN ? "✅ Cargado" : "❌ Faltante",
-  CHAT_ID: process.env.CHAT_ID ? "✅ Cargado" : "❌ Faltante",
-  NODE_ENV: process.env.NODE_ENV || 'development'
-});
-
-// Configuración de Telegram (usa valores por defecto SOLO para desarrollo)
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || '7929110467:AAEvAlnqfT3UQR_eSlNCiI60AAVbZLAywJQ';
-const CHAT_ID = process.env.CHAT_ID || '8051322214';
-
-// Función robusta para enviar alertas a Telegram
+// Función para enviar mensajes a Telegram
 async function sendAlert(message) {
-  const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
-  console.log('[TELEGRAM] Enviando mensaje a:', url.replace(TELEGRAM_TOKEN, 'TOKEN_OCULTO'));
+  const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
 
-  try {
-    const response = await axios.post(url, {
-      chat_id: CHAT_ID,
-      text: message,
-      parse_mode: 'Markdown',
-      disable_web_page_preview: true
-    }, {
-      timeout: 5000 // Timeout de 5 segundos
-    });
-    console.log('[TELEGRAM] ✅ Notificación enviada');
-    return true;
-  } catch (error) {
-    console.error('[TELEGRAM] ❌ Error:', {
-      status: error.response?.status,
-      error: error.response?.data || error.message
-    });
-    return false;
-  }
+  const telegramUrl = `https://api.telegram.org/bot${telegramBotToken}/sendMessage`;
+  await axios.post(telegramUrl, {
+    chat_id: chatId,
+    text: message,
+    parse_mode: 'Markdown',
+  });
 }
 
-// Endpoint de prueba independiente
-app.get('/test-telegram', async (req, res) => {
-  try {
-    await sendAlert("🔔 Prueba de conexión con Telegram (Funcionalidad activa)");
-    res.send("✅ Prueba exitosa. Revisa Telegram.");
-  } catch (error) {
-    res.status(500).send(`❌ Error: ${error.message}`);
-  }
-});
-
-// Webhook principal para Helius (con manejo de errores)
+// Endpoint para recibir el Webhook
 app.post('/webhook', async (req, res) => {
   try {
-    console.log('[HELIUS] 🔔 Payload recibido:', JSON.stringify(req.body, null, 2));
     const { event } = req.body;
+    console.log('[HELIUS] 🔔 Payload recibido:', event);
 
-    // Verifica si el evento tiene los datos necesarios
-    if (!event || !event.source || !event.signature || !event.amount) {
-      console.warn('[HELIUS] ⚠️ Payload incompleto o mal formado');
+    if (!event || !event.source || !event.signature) {
+      console.warn('[HELIUS] ⚠️ Payload inválido');
       return res.status(400).send('Datos incompletos');
     }
 
-    // Filtro para la transacción específica (Kucoin -> 99.99 SOL)
-    if (event.source === "BmFdpraQhkiDQE6SnfG5omcA1VwzqfXrwtNYBwWTymy6" && event.amount === 99990000000) {
+    // Verificar si la transacción es de 99.99 SOL
+    const expectedAmountSOL = 99990000000;  // 99.99 SOL (en lamports)
+    
+    // Validar si la transacción es del monto correcto y de la cuenta correcta
+    if (event.nativeBalanceChange === expectedAmountSOL && event.source === 'BmFdpraQhkiDQE6SnfG5omcA1VwzqfXrwtNYBwWTymy6') {
+      console.log('[HELIUS] 🔔 Transacción válida de 99.99 SOL encontrada:', event);
       const explorerUrl = `https://solscan.io/tx/${event.signature}`;
       const msg = `🚨 *99.99 SOL Enviados* 🚨\n\n▸ *Origen:* \`${event.source}\`\n▸ [Ver TX](${explorerUrl})`;
 
       console.log('[HELIUS] Notificando transacción...');
-      await sendAlert(msg); // Envía la alerta solo si se encuentra la transacción válida
+      await sendAlert(msg);  // Enviar mensaje a Telegram
     } else {
-      console.log('[HELIUS] ⚠️ No se encontró una transacción de 99.99 SOL');
+      console.log('[HELIUS] 🔍 Transacción no coincide con los criterios.');
     }
 
-    // Responde correctamente solo si la transacción es válida
     res.status(200).send("OK");
   } catch (error) {
     console.error('[HELIUS] 🔥 Error crítico:', error);
@@ -81,11 +51,9 @@ app.post('/webhook', async (req, res) => {
   }
 });
 
-// Health checks
-app.get('/ping', (req, res) => res.sendStatus(200));
-app.get('/', (req, res) => res.send('🟢 Webhook operativo. Endpoints: /webhook (POST), /test-telegram (GET)'));
-
-// Inicio del servidor
+// Puerto de escucha
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Servidor escuchando en puerto ${PORT} | Modo: ${process.env.NODE_ENV || 'development'}`));
+app.listen(PORT, () => {
+  console.log(`Servidor escuchando en el puerto ${PORT}`);
+});
 

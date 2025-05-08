@@ -2,8 +2,16 @@ const axios = require('axios');
 
 async function handler(event) {
   try {
-    // Parseamos el payload recibido del webhook
-    const payload = JSON.parse(event.body);
+    console.log('[HELIUS] 🏁 Iniciando procesamiento de la transacción...');
+    
+    // Verificar que el cuerpo de la solicitud existe
+    if (!event.body) {
+      console.log('[HELIUS] ⚠️ No se recibió un cuerpo en la solicitud.');
+      return { statusCode: 400, body: 'No body in the request' };
+    }
+
+    // Aquí ya no necesitamos parsear, directamente accedemos al body
+    const payload = event.body;
 
     console.log('[HELIUS] 🔔 Payload recibido:', payload);
 

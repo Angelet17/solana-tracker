@@ -79,3 +79,14 @@ app.listen(PORT, () => {
   console.log(`🚀 Servidor iniciado en puerto ${PORT}`);
 });
 
+// Ping y prueba de Telegram
+app.get('/ping', (req, res) => res.sendStatus(200));
+app.get('/test-telegram', async (req, res) => {
+  try {
+    await sendAlert("🔔 Prueba de conexión con Telegram");
+    res.send("✅ Mensaje enviado.");
+  } catch (error) {
+    res.status(500).send("❌ Error enviando mensaje.");
+  }
+});
+

@@ -1,7 +1,7 @@
 export default async function handler(req, res) {
   console.log("[HELIUS] 🏁 Iniciando procesamiento de la transacción...");
 
-  // ✅ Respuesta rápida para evitar timeout
+  // ✅ Respuesta rápida para evitar timeout de Vercel
   res.status(200).send("OK");
 
   try {
@@ -15,7 +15,7 @@ export default async function handler(req, res) {
     console.log("[HELIUS] 🔔 Payload recibido:", JSON.stringify(payload, null, 2));
 
     const KUCOIN_WALLET = "BmFdpraQhkiDQE6SnfG5omcA1VwzqfXrwtNYBwWTymy6";
-    const TARGET_AMOUNT_SOL = 99.99;
+    const TARGET_AMOUNT_SOL = 60; 
     const LAMPORTS_PER_SOL = 1_000_000_000;
 
     let transaccionesConWallet = payload.filter((tx) => {
@@ -49,15 +49,21 @@ export default async function handler(req, res) {
     );
 
     if (transaccionesObjetivo.length === 0) {
-      console.log("[HELIUS] ⚠️ No se encontraron transacciones con 99.99 SOL.");
+      console.log(`[HELIUS] ⚠️ No se encontraron transacciones con ${TARGET_AMOUNT_SOL} SOL.`);
       return;
     }
 
-    console.log(`[HELIUS] ✅ ${transaccionesObjetivo.length} transacción(es) con 99.99 SOL encontrada(s)!`);
+    console.log(`[HELIUS] ✅ ${transaccionesObjetivo.length} transacción(es) con ${TARGET_AMOUNT_SOL} SOL encontrada(s)!`);
 
     // 📨 Notificar por Telegram
     for (const tx of transaccionesObjetivo) {
-      const message = `🚨 Transacción de 99.99 SOL detectada 🚨\n\nHash: ${tx.signature}\nDescripción: ${tx.description}`;
+      const message = `🚨 *¡ALERTA DE TRANSACCIÓN DETECTADA!* 🚨
+
+💰 *Monto:* ${TARGET_AMOUNT_SOL} SOL
+📤 *Desde / Hacia:* ${KUCOIN_WALLET}
+🔗 *Hash:* [${tx.signature}](https://solscan.io/tx/${tx.signature})
+📝 *Descripción:* ${tx.description}`;
+
       await enviarTelegramMensaje(message);
     }
   } catch (error) {
@@ -84,6 +90,8 @@ async function enviarTelegramMensaje(texto) {
       body: JSON.stringify({
         chat_id: TELEGRAM_CHAT_ID,
         text: texto,
+        parse_mode: "Markdown",
+        disable_web_page_preview: true,
       }),
     });
 

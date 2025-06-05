@@ -15,11 +15,11 @@ export default async function handler(req, res) {
     console.log("[HELIUS] 🔔 Payload recibido:", JSON.stringify(payload, null, 2));
 
     const KUCOIN_WALLET = "BmFdpraQhkiDQE6SnfG5omcA1VwzqfXrwtNYBwWTymy6";
-    const AMOUNTS_TO_WATCH = [60, 99.99];
     const LAMPORTS_PER_SOL = 1_000_000_000;
+    const MIN_AMOUNT_SOL = 100;
 
     // Filtra transacciones en las que está involucrada la wallet
-    let transaccionesConWallet = payload.filter((tx) => {
+    const transaccionesConWallet = payload.filter((tx) => {
       return (
         tx.nativeTransfers &&
         tx.nativeTransfers.some(
@@ -35,36 +35,43 @@ export default async function handler(req, res) {
 
     console.log(`[HELIUS] 🔍 ${transaccionesConWallet.length} transacciones encontradas con la wallet.`);
 
-    // Mostrar 3 ejemplos
     console.log("[HELIUS] 📦 Ejemplo(s) de transacciones:");
     transaccionesConWallet.slice(0, 3).forEach((tx, idx) => {
       console.log(`  ➤ [${idx + 1}] ${tx.description}`);
     });
 
-    // Busca transacciones con alguna de las cantidades definidas
+    // Buscar transacciones salientes de KuCoin con monto > 100 SOL
     const transaccionesObjetivo = transaccionesConWallet.filter((tx) =>
       tx.nativeTransfers.some((nt) =>
-        (nt.fromUserAccount === KUCOIN_WALLET || nt.toUserAccount === KUCOIN_WALLET) &&
-        AMOUNTS_TO_WATCH.some((amt) => nt.amount === amt * LAMPORTS_PER_SOL)
+        nt.fromUserAccount === KUCOIN_WALLET &&
+        nt.amount > MIN_AMOUNT_SOL * LAMPORTS_PER_SOL
       )
     );
 
     if (transaccionesObjetivo.length === 0) {
-      console.log("[HELIUS] ⚠️ No se encontraron transacciones con montos objetivo.");
+      console.log("[HELIUS] ⚠️ No se encontraron transacciones >100 SOL salientes.");
       return;
     }
 
-    console.log(`[HELIUS] ✅ ${transaccionesObjetivo.length} transacción(es) con montos objetivo encontrada(s)!`);
+    console.log(`[HELIUS] ✅ ${transaccionesObjetivo.length} transacción(es) con montos >100 SOL encontrada(s)!`);
 
     // 📨 Notificar por Telegram
     for (const tx of transaccionesObjetivo) {
-      const transfer = tx.nativeTransfers.find((nt) =>
-        AMOUNTS_TO_WATCH.some((amt) => nt.amount === amt * LAMPORTS_PER_SOL)
+      const transfer = tx.nativeTransfers.find(
+        (nt) =>
+          nt.fromUserAccount === KUCOIN_WALLET &&
+          nt.amount > MIN_AMOUNT_SOL * LAMPORTS_PER_SOL
       );
 
       const solAmount = transfer.amount / LAMPORTS_PER_SOL;
+      const txUrl = `https://solscan.io/tx/${tx.signature}`;
 
-      const message = `🚨 *Transacción Detectada* 🚨\n\n💸 *Cantidad:* ${solAmount} SOL\n🧾 *Descripción:* ${tx.description}\n🔗 *Hash:* \`${tx.signature}\``;
+      const message = `🚨 *Transacción >100 SOL Detectada* 🚨
+
+💸 *Cantidad:* ${solAmount} SOL
+👛 *Destino:* ${transfer.toUserAccount}
+🔗 [Ver en Solscan](${txUrl})
+`;
 
       await enviarTelegramMensaje(message);
     }
@@ -92,7 +99,7 @@ async function enviarTelegramMensaje(texto) {
       body: JSON.stringify({
         chat_id: TELEGRAM_CHAT_ID,
         text: texto,
-        parse_mode: "Markdown"
+        parse_mode: "Markdown",
       }),
     });
 
